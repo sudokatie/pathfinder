@@ -1,5 +1,7 @@
 mod cli;
 mod platform;
+mod symlink;
+mod version;
 
 use cli::parse_args;
 
