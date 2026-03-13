@@ -2,10 +2,9 @@
 //!
 //! Structured output for scripting and piping.
 
-use crate::analyzer::{IssueLevel, PathAnalysis, PathIssue};
-use crate::resolver::{CommandMatch, ResolutionResult};
+use crate::analyzer::{IssueLevel, PathAnalysis};
+use crate::resolver::ResolutionResult;
 use serde::Serialize;
-use std::path::PathBuf;
 
 /// JSON-serializable resolution result.
 #[derive(Debug, Serialize)]
@@ -103,6 +102,8 @@ pub fn format_analysis(analysis: &PathAnalysis) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resolver::CommandMatch;
+    use std::path::PathBuf;
 
     fn mock_result() -> ResolutionResult {
         ResolutionResult {

@@ -22,6 +22,7 @@ pub fn get_path_entries() -> Vec<PathBuf> {
 }
 
 /// Check if a file is executable.
+#[allow(dead_code)]
 pub fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -47,6 +48,7 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
 }
 
 /// Get the PATH separator for the current platform.
+#[allow(dead_code)]
 pub fn path_separator() -> char {
     #[cfg(unix)]
     {

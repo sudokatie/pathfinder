@@ -13,6 +13,7 @@ const MAX_SYMLINK_DEPTH: usize = 40;
 #[derive(Debug, Clone)]
 pub struct SymlinkInfo {
     /// The original symlink path.
+    #[allow(dead_code)]
     pub original: PathBuf,
     /// The final resolved target (if resolvable).
     pub target: Option<PathBuf>,

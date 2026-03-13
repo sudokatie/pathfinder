@@ -46,6 +46,7 @@ impl PathAnalysis {
     }
     
     /// Check if there are any issues at all.
+    #[allow(dead_code)]
     pub fn has_issues(&self) -> bool {
         !self.issues.is_empty()
     }

@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 /// Default timeout for version detection in milliseconds.
+#[allow(dead_code)]
 pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
 
 /// Version flags to try, in order.
@@ -63,7 +64,7 @@ fn try_version_flag(path: &Path, flag: &str, timeout_ms: u64) -> Option<String> 
 }
 
 /// Wait for a process with timeout.
-fn wait_with_timeout(mut child: std::process::Child, timeout_ms: u64) -> Option<std::process::Output> {
+fn wait_with_timeout(child: std::process::Child, timeout_ms: u64) -> Option<std::process::Output> {
     use std::thread;
     use std::sync::mpsc;
     
