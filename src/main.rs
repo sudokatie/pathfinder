@@ -1,5 +1,6 @@
 mod cli;
 mod platform;
+mod resolver;
 mod symlink;
 mod version;
 
