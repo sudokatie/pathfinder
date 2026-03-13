@@ -1,5 +1,6 @@
 mod analyzer;
 mod cli;
+mod output;
 mod platform;
 mod resolver;
 mod symlink;
