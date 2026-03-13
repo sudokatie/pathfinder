@@ -1,3 +1,4 @@
+mod analyzer;
 mod cli;
 mod platform;
 mod resolver;
