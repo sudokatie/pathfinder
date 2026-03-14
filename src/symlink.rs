@@ -109,10 +109,12 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
         if !is_symlink(&current) {
             // Reached a non-symlink - check if it exists
             if current.exists() {
+                // Canonicalize to get clean absolute path (per spec 4.1)
+                let canonical = fs::canonicalize(&current).unwrap_or(current);
                 return SymlinkInfo {
                     original: path.to_path_buf(),
                     raw_target,
-                    resolved: Some(current),
+                    resolved: Some(canonical),
                     chain,
                     is_broken: false,
                     is_circular: false,
@@ -261,7 +263,9 @@ mod tests {
         let info = resolve_symlink(&file);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.resolved, Some(file.clone()));
+        // Use canonicalize for comparison since resolve now canonicalizes
+        let expected = fs::canonicalize(&file).unwrap();
+        assert_eq!(info.resolved, Some(expected));
         assert!(info.raw_target.is_none()); // Not a symlink
     }
 
@@ -277,7 +281,9 @@ mod tests {
         let info = resolve_symlink(&link);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.resolved, Some(target.clone()));
+        // Use canonicalize for comparison since resolve now canonicalizes
+        let expected = fs::canonicalize(&target).unwrap();
+        assert_eq!(info.resolved, Some(expected));
         assert_eq!(info.raw_target, Some(target)); // Absolute path in this case
         assert_eq!(info.chain.len(), 2);
     }
@@ -329,7 +335,9 @@ mod tests {
         let info = resolve_symlink(&link3);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.resolved, Some(target));
+        // Use canonicalize for comparison since resolve now canonicalizes
+        let expected = fs::canonicalize(&target).unwrap();
+        assert_eq!(info.resolved, Some(expected));
         assert_eq!(info.chain.len(), 4); // link3 -> link2 -> link1 -> target
     }
 
