@@ -12,26 +12,28 @@ pub struct JsonOutput {
     pub command: String,
     pub resolved: Option<String>,
     pub matches: Vec<JsonMatch>,
+    pub path_searched: Vec<String>,
 }
 
 /// JSON-serializable command match.
 #[derive(Debug, Serialize)]
 pub struct JsonMatch {
     pub path: String,
-    pub position: usize,
-    pub path_dir: String,
-    pub is_selected: bool,
+    pub selected: bool,
     pub version: Option<String>,
     pub symlink: Option<JsonSymlink>,
+    pub executable: bool,
 }
 
 /// JSON-serializable symlink info.
 #[derive(Debug, Serialize)]
 pub struct JsonSymlink {
+    /// The raw symlink target (as stored, may be relative).
     pub target: Option<String>,
-    pub chain: Vec<String>,
-    pub is_broken: bool,
-    pub is_circular: bool,
+    /// The fully resolved absolute path.
+    pub resolved: Option<String>,
+    /// Whether the symlink is broken.
+    pub broken: bool,
 }
 
 /// JSON-serializable PATH analysis.
@@ -62,17 +64,20 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
             .iter()
             .map(|m| JsonMatch {
                 path: m.path.display().to_string(),
-                position: m.position,
-                path_dir: m.path_dir.display().to_string(),
-                is_selected: m.is_selected,
+                selected: m.is_selected,
                 version: m.version.clone(),
                 symlink: m.symlink.as_ref().map(|s| JsonSymlink {
-                    target: s.target.as_ref().map(|p| p.display().to_string()),
-                    chain: s.chain.iter().map(|p| p.display().to_string()).collect(),
-                    is_broken: s.is_broken,
-                    is_circular: s.is_circular,
+                    target: s.raw_target.as_ref().map(|p| p.display().to_string()),
+                    resolved: s.resolved.as_ref().map(|p| p.display().to_string()),
+                    broken: s.is_broken,
                 }),
+                executable: m.executable,
             })
+            .collect(),
+        path_searched: result
+            .path_searched
+            .iter()
+            .map(|p| p.display().to_string())
             .collect(),
     };
 
@@ -175,7 +180,9 @@ mod tests {
                 is_selected: true,
                 version: Some("1.0.0".to_string()),
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
         }
     }
 
@@ -197,6 +204,31 @@ mod tests {
     }
 
     #[test]
+    fn test_format_resolution_has_selected() {
+        let result = mock_result();
+        let output = format_resolution(&result);
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["matches"][0]["selected"], true);
+    }
+
+    #[test]
+    fn test_format_resolution_has_executable() {
+        let result = mock_result();
+        let output = format_resolution(&result);
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["matches"][0]["executable"], true);
+    }
+
+    #[test]
+    fn test_format_resolution_has_path_searched() {
+        let result = mock_result();
+        let output = format_resolution(&result);
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert!(parsed["path_searched"].is_array());
+        assert_eq!(parsed["path_searched"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
     fn test_format_analysis_valid_json() {
         let analysis = PathAnalysis {
             total_entries: 5,
@@ -214,6 +246,7 @@ mod tests {
             command: "notfound".to_string(),
             resolved: None,
             matches: vec![],
+            path_searched: vec![PathBuf::from("/usr/bin")],
         };
         let output = format_resolution(&result);
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
@@ -261,7 +294,9 @@ mod tests {
                 is_selected: true,
                 version: None,
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
         };
         let result2 = ResolutionResult {
             command: "cmd2".to_string(),
@@ -273,7 +308,9 @@ mod tests {
                 is_selected: true,
                 version: None,
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
         };
 
         let results = vec![result1, result2];

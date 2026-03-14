@@ -53,6 +53,33 @@ fn test_json_output() {
 }
 
 #[test]
+fn test_json_output_has_path_searched() {
+    pathfinder()
+        .args(["ls", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"path_searched\""));
+}
+
+#[test]
+fn test_json_output_has_selected() {
+    pathfinder()
+        .args(["ls", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"selected\""));
+}
+
+#[test]
+fn test_json_output_has_executable() {
+    pathfinder()
+        .args(["ls", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"executable\""));
+}
+
+#[test]
 fn test_plain_output() {
     pathfinder()
         .args(["ls", "--plain"])
@@ -72,10 +99,11 @@ fn test_analyze_mode() {
 
 #[test]
 fn test_no_command_error() {
+    // Per SPECS 7.2: "Usage: pathfinder <command>"
     pathfinder()
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("No command specified"));
+        .stderr(predicate::str::contains("Usage: pathfinder <command>"));
 }
 
 #[test]
@@ -117,4 +145,17 @@ fn test_diff_requires_two_commands() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains("requires at least 2 commands"));
+}
+
+#[test]
+fn test_timeout_flag() {
+    pathfinder()
+        .args(["ls", "--timeout", "1000"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_no_color_flag() {
+    pathfinder().args(["ls", "--no-color"]).assert().success();
 }

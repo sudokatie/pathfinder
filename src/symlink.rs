@@ -15,9 +15,12 @@ pub struct SymlinkInfo {
     /// The original symlink path.
     #[allow(dead_code)]
     pub original: PathBuf,
-    /// The final resolved target (if resolvable).
-    pub target: Option<PathBuf>,
+    /// The raw symlink target (as stored in the filesystem, may be relative).
+    pub raw_target: Option<PathBuf>,
+    /// The final fully-resolved target path (if resolvable).
+    pub resolved: Option<PathBuf>,
     /// The chain of symlinks followed.
+    #[allow(dead_code)]
     pub chain: Vec<PathBuf>,
     /// Whether the symlink is broken.
     pub is_broken: bool,
@@ -41,6 +44,9 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
     let mut seen = HashSet::new();
     let mut current = path.to_path_buf();
 
+    // Read the raw target of the first symlink
+    let raw_target = fs::read_link(path).ok();
+
     // Add the starting path
     chain.push(current.clone());
     seen.insert(current.clone());
@@ -50,7 +56,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
         if chain.len() > MAX_SYMLINK_DEPTH {
             return SymlinkInfo {
                 original: path.to_path_buf(),
-                target: None,
+                raw_target,
+                resolved: None,
                 chain,
                 is_broken: false,
                 is_circular: true,
@@ -63,7 +70,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
             if current.exists() {
                 return SymlinkInfo {
                     original: path.to_path_buf(),
-                    target: Some(current),
+                    raw_target,
+                    resolved: Some(current),
                     chain,
                     is_broken: false,
                     is_circular: false,
@@ -71,7 +79,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
             } else {
                 return SymlinkInfo {
                     original: path.to_path_buf(),
-                    target: None,
+                    raw_target,
+                    resolved: None,
                     chain,
                     is_broken: true,
                     is_circular: false,
@@ -83,33 +92,35 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
         match fs::read_link(&current) {
             Ok(target) => {
                 // Resolve relative targets
-                let resolved = if target.is_absolute() {
+                let resolved_path = if target.is_absolute() {
                     target
                 } else {
                     current.parent().map(|p| p.join(&target)).unwrap_or(target)
                 };
 
                 // Check for circular reference
-                if seen.contains(&resolved) {
-                    chain.push(resolved);
+                if seen.contains(&resolved_path) {
+                    chain.push(resolved_path);
                     return SymlinkInfo {
                         original: path.to_path_buf(),
-                        target: None,
+                        raw_target,
+                        resolved: None,
                         chain,
                         is_broken: false,
                         is_circular: true,
                     };
                 }
 
-                chain.push(resolved.clone());
-                seen.insert(resolved.clone());
-                current = resolved;
+                chain.push(resolved_path.clone());
+                seen.insert(resolved_path.clone());
+                current = resolved_path;
             }
             Err(_) => {
                 // Can't read the symlink - broken
                 return SymlinkInfo {
                     original: path.to_path_buf(),
-                    target: None,
+                    raw_target,
+                    resolved: None,
                     chain,
                     is_broken: true,
                     is_circular: false,
@@ -160,7 +171,8 @@ mod tests {
         let info = resolve_symlink(&file);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.target, Some(file.clone()));
+        assert_eq!(info.resolved, Some(file.clone()));
+        assert!(info.raw_target.is_none()); // Not a symlink
     }
 
     #[test]
@@ -175,7 +187,8 @@ mod tests {
         let info = resolve_symlink(&link);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.target, Some(target));
+        assert_eq!(info.resolved, Some(target.clone()));
+        assert_eq!(info.raw_target, Some(target)); // Absolute path in this case
         assert_eq!(info.chain.len(), 2);
     }
 
@@ -190,7 +203,8 @@ mod tests {
         let info = resolve_symlink(&link);
         assert!(info.is_broken);
         assert!(!info.is_circular);
-        assert!(info.target.is_none());
+        assert!(info.resolved.is_none());
+        assert!(info.raw_target.is_some()); // We can still read what it points to
     }
 
     #[test]
@@ -206,7 +220,7 @@ mod tests {
         let info = resolve_symlink(&link_a);
         assert!(info.is_circular);
         assert!(!info.is_broken);
-        assert!(info.target.is_none());
+        assert!(info.resolved.is_none());
     }
 
     #[test]
@@ -225,7 +239,20 @@ mod tests {
         let info = resolve_symlink(&link3);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
-        assert_eq!(info.target, Some(target));
+        assert_eq!(info.resolved, Some(target));
         assert_eq!(info.chain.len(), 4); // link3 -> link2 -> link1 -> target
+    }
+
+    #[test]
+    fn test_raw_target_preserved() {
+        let tmp = TempDir::new().unwrap();
+        let target = tmp.path().join("target.txt");
+        let link = tmp.path().join("link.txt");
+
+        fs::write(&target, "test").unwrap();
+        symlink(&target, &link).unwrap();
+
+        let info = resolve_symlink(&link);
+        assert!(info.raw_target.is_some());
     }
 }

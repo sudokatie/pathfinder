@@ -9,6 +9,7 @@ mod version;
 use analyzer::analyze_path;
 use cli::parse_args;
 use output::{print_analysis, print_diff, print_explain, print_resolution, OutputFormat};
+use platform::get_path_entries;
 use resolver::{resolve_command, ResolveConfig};
 
 fn main() {
@@ -26,6 +27,13 @@ fn main() {
     // Determine color usage
     let use_color = !args.no_color && !args.plain && atty::is(atty::Stream::Stdout);
 
+    // Check for empty PATH
+    let path_entries = get_path_entries();
+    if path_entries.is_empty() {
+        eprintln!("Error: PATH environment variable is empty");
+        std::process::exit(2);
+    }
+
     // Handle analyze mode
     if args.analyze {
         let analysis = analyze_path();
@@ -42,7 +50,9 @@ fn main() {
     let command = match &args.command {
         Some(cmd) => cmd,
         None => {
-            eprintln!("Error: No command specified. Use --analyze for PATH analysis.");
+            eprintln!("Usage: pathfinder <command>");
+            eprintln!();
+            eprintln!("For more information, try '--help'.");
             std::process::exit(2);
         }
     };

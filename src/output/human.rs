@@ -41,17 +41,48 @@ pub fn format_resolution(result: &ResolutionResult, use_color: bool) -> String {
 
         output.push_str(&format!("{}. {}  {}\n", i + 1, m.path.display(), marker));
 
-        if let Some(version) = &m.version {
+        // Show version, or special messages for broken symlinks
+        if let Some(symlink) = &m.symlink {
+            if symlink.is_broken {
+                output.push_str(&format!("   version: {}\n", "(broken symlink)".red()));
+            } else if let Some(version) = &m.version {
+                output.push_str(&format!("   version: {}\n", version.cyan()));
+            }
+        } else if let Some(version) = &m.version {
             output.push_str(&format!("   version: {}\n", version.cyan()));
         }
 
+        // Show symlink info
         if let Some(symlink) = &m.symlink {
             if symlink.is_broken {
-                output.push_str(&format!("   symlink: {} (broken)\n", "yes".red()));
+                // Show broken symlink with DEAD marker
+                if let Some(raw) = &symlink.raw_target {
+                    output.push_str(&format!(
+                        "   symlink: {} {} {}\n",
+                        "->".dimmed(),
+                        raw.display(),
+                        "(DEAD)".red()
+                    ));
+                } else {
+                    output.push_str(&format!("   symlink: {} {}\n", "yes".red(), "(broken)"));
+                }
             } else if symlink.is_circular {
-                output.push_str(&format!("   symlink: {} (circular)\n", "yes".red()));
-            } else if let Some(target) = &symlink.target {
-                output.push_str(&format!("   symlink: -> {}\n", target.display()));
+                if let Some(raw) = &symlink.raw_target {
+                    output.push_str(&format!(
+                        "   symlink: {} {} {}\n",
+                        "->".dimmed(),
+                        raw.display(),
+                        "(CIRCULAR)".red()
+                    ));
+                } else {
+                    output.push_str(&format!("   symlink: {} {}\n", "yes".red(), "(circular)"));
+                }
+            } else if let Some(raw) = &symlink.raw_target {
+                output.push_str(&format!(
+                    "   symlink: {} {}\n",
+                    "->".dimmed(),
+                    raw.display()
+                ));
             }
         } else {
             output.push_str("   symlink: no\n");
@@ -292,7 +323,9 @@ mod tests {
                 is_selected: true,
                 version: Some("1.0.0".to_string()),
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin")],
         }
     }
 
@@ -310,6 +343,7 @@ mod tests {
             command: "notfound".to_string(),
             resolved: None,
             matches: vec![],
+            path_searched: vec![PathBuf::from("/usr/bin")],
         };
         let output = format_resolution(&result, false);
         assert!(output.contains("NOT FOUND"));
@@ -340,6 +374,7 @@ mod tests {
             command: "notfound".to_string(),
             resolved: None,
             matches: vec![],
+            path_searched: vec![],
         };
         let output = format_explain(&result);
         assert!(output.contains("was not found"));
@@ -379,7 +414,9 @@ mod tests {
                 is_selected: true,
                 version: None,
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
         };
         let result2 = ResolutionResult {
             command: "cmd2".to_string(),
@@ -391,7 +428,9 @@ mod tests {
                 is_selected: true,
                 version: None,
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
         };
 
         let results = vec![result1, result2];

@@ -29,17 +29,33 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
 
         output.push_str(&format!("{}. {}{}\n", i + 1, m.path.display(), marker));
 
-        if let Some(version) = &m.version {
+        // Show version, or special messages for broken symlinks
+        if let Some(symlink) = &m.symlink {
+            if symlink.is_broken {
+                output.push_str("   version: (broken symlink)\n");
+            } else if let Some(version) = &m.version {
+                output.push_str(&format!("   version: {}\n", version));
+            }
+        } else if let Some(version) = &m.version {
             output.push_str(&format!("   version: {}\n", version));
         }
 
+        // Show symlink info
         if let Some(symlink) = &m.symlink {
             if symlink.is_broken {
-                output.push_str("   symlink: yes (broken)\n");
+                if let Some(raw) = &symlink.raw_target {
+                    output.push_str(&format!("   symlink: -> {} (DEAD)\n", raw.display()));
+                } else {
+                    output.push_str("   symlink: yes (broken)\n");
+                }
             } else if symlink.is_circular {
-                output.push_str("   symlink: yes (circular)\n");
-            } else if let Some(target) = &symlink.target {
-                output.push_str(&format!("   symlink: -> {}\n", target.display()));
+                if let Some(raw) = &symlink.raw_target {
+                    output.push_str(&format!("   symlink: -> {} (CIRCULAR)\n", raw.display()));
+                } else {
+                    output.push_str("   symlink: yes (circular)\n");
+                }
+            } else if let Some(raw) = &symlink.raw_target {
+                output.push_str(&format!("   symlink: -> {}\n", raw.display()));
             }
         } else {
             output.push_str("   symlink: no\n");
@@ -221,7 +237,9 @@ mod tests {
                 is_selected: true,
                 version: None,
                 symlink: None,
+                executable: true,
             }],
+            path_searched: vec![PathBuf::from("/usr/bin")],
         }
     }
 
@@ -239,6 +257,7 @@ mod tests {
             command: "notfound".to_string(),
             resolved: None,
             matches: vec![],
+            path_searched: vec![PathBuf::from("/usr/bin")],
         };
         let output = format_resolution(&result);
         assert!(output.contains("NOT FOUND"));

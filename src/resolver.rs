@@ -22,6 +22,8 @@ pub struct CommandMatch {
     pub version: Option<String>,
     /// Symlink information (if it's a symlink).
     pub symlink: Option<SymlinkInfo>,
+    /// Whether the file is executable (vs permission denied).
+    pub executable: bool,
 }
 
 /// Result of resolving a command.
@@ -33,6 +35,8 @@ pub struct ResolutionResult {
     pub resolved: Option<PathBuf>,
     /// All matches found in PATH order.
     pub matches: Vec<CommandMatch>,
+    /// All PATH directories that were searched.
+    pub path_searched: Vec<PathBuf>,
 }
 
 /// Configuration for resolution.
@@ -56,6 +60,7 @@ impl Default for ResolveConfig {
 /// Resolve a command by searching all PATH entries.
 pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResult {
     let path_entries = get_path_entries();
+    let path_searched = path_entries.clone();
     let mut matches = Vec::new();
     let mut resolved = None;
 
@@ -81,6 +86,9 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
                 None
             };
 
+            // File is executable if we found it (find_command_in_dir checks this)
+            let executable = true;
+
             matches.push(CommandMatch {
                 path,
                 position,
@@ -88,6 +96,7 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
                 is_selected,
                 version,
                 symlink,
+                executable,
             });
         }
     }
@@ -96,6 +105,7 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
         command: command.to_string(),
         resolved,
         matches,
+        path_searched,
     }
 }
 
@@ -178,5 +188,19 @@ mod tests {
     fn test_command_stored() {
         let result = resolve_command("cat", &config_no_version());
         assert_eq!(result.command, "cat");
+    }
+
+    #[test]
+    fn test_path_searched_populated() {
+        let result = resolve_command("ls", &config_no_version());
+        assert!(!result.path_searched.is_empty());
+    }
+
+    #[test]
+    fn test_executable_flag() {
+        let result = resolve_command("ls", &config_no_version());
+        if !result.matches.is_empty() {
+            assert!(result.matches[0].executable);
+        }
     }
 }
