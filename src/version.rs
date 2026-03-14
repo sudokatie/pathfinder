@@ -56,11 +56,50 @@ fn try_version_flag(path: &Path, flag: &str, timeout_ms: u64) -> Option<String> 
         return None;
     };
 
-    // Return first non-empty line
+    // Return first non-empty line that looks like version output
     text.lines()
         .map(|l| l.trim())
-        .find(|l| !l.is_empty())
+        .find(|l| !l.is_empty() && looks_like_version(l))
         .map(|s| s.to_string())
+}
+
+/// Heuristic check if a line looks like version output.
+/// Filters out false positives like directory listings from `ls -v`.
+fn looks_like_version(line: &str) -> bool {
+    // Must contain at least one digit (versions have numbers)
+    if !line.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    // Should not be just a filename (no path separators, not too short without keywords)
+    if !line.contains(' ') && !line.contains('/') && line.len() < 10 {
+        // Short single word without spaces - might be a filename
+        // Accept if it contains version-like patterns
+        if !line.contains('.') && !line.to_lowercase().contains('v') {
+            return false;
+        }
+    }
+
+    // Common version indicators
+    let version_keywords = ["version", "Version", "VERSION", " v", "v.", "v:", "."];
+    let has_keyword = version_keywords.iter().any(|k| line.contains(k));
+
+    // If it has a keyword, likely a version
+    if has_keyword {
+        return true;
+    }
+
+    // Accept patterns like "1.2.3" or "node v20.0.0"
+    // But reject things that look like filenames (single words without dots between numbers)
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() == 1 {
+        // Single word - must have version-like structure (X.Y or vX)
+        let word = parts[0];
+        word.contains('.') || word.starts_with('v') || word.starts_with('V')
+    } else {
+        // Multi-word - more likely to be version info
+        true
+    }
 }
 
 /// Wait for a process with timeout.
@@ -133,5 +172,27 @@ mod tests {
     #[test]
     fn test_default_timeout() {
         assert_eq!(DEFAULT_TIMEOUT_MS, 2000);
+    }
+
+    #[test]
+    fn test_looks_like_version_true_cases() {
+        assert!(looks_like_version("v20.10.0"));
+        assert!(looks_like_version("node v20.10.0"));
+        assert!(looks_like_version("Python 3.11.0"));
+        assert!(looks_like_version("rustc 1.75.0 (82e1608df 2023-12-21)"));
+        assert!(looks_like_version("git version 2.42.0"));
+        assert!(looks_like_version("1.2.3"));
+        assert!(looks_like_version("npm 10.2.3"));
+    }
+
+    #[test]
+    fn test_looks_like_version_false_cases() {
+        // Filenames from `ls -v` output
+        assert!(!looks_like_version("Cargo.lock"));
+        assert!(!looks_like_version("README"));
+        assert!(!looks_like_version("src"));
+        // No digits
+        assert!(!looks_like_version("hello world"));
+        assert!(!looks_like_version("foobar"));
     }
 }

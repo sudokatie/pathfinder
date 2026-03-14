@@ -1,16 +1,8 @@
-mod analyzer;
-mod cli;
-mod output;
-mod platform;
-mod resolver;
-mod symlink;
-mod version;
-
-use analyzer::analyze_path;
-use cli::parse_args;
-use output::{print_analysis, print_diff, print_explain, print_resolution, OutputFormat};
-use platform::get_path_entries;
-use resolver::{resolve_command, ResolveConfig};
+use pathfinder::analyzer::analyze_path;
+use pathfinder::cli::parse_args;
+use pathfinder::output::{print_analysis, print_diff, print_explain, print_resolution, OutputFormat};
+use pathfinder::platform::get_path_entries;
+use pathfinder::resolver::{resolve_command, ResolveConfig};
 
 fn main() {
     let args = parse_args();
