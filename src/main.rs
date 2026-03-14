@@ -23,7 +23,7 @@ fn main() {
 
     // Check for empty PATH (before parsing, since empty string becomes ["."])
     if is_path_empty() {
-        eprintln!("Error: PATH environment variable is empty");
+        eprintln!("PATH environment variable is empty");
         std::process::exit(2);
     }
 
