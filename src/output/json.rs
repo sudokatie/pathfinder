@@ -57,8 +57,10 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
     let json_output = JsonOutput {
         command: result.command.clone(),
         resolved: result.resolved.as_ref().map(|p| p.display().to_string()),
-        matches: result.matches.iter().map(|m| {
-            JsonMatch {
+        matches: result
+            .matches
+            .iter()
+            .map(|m| JsonMatch {
                 path: m.path.display().to_string(),
                 position: m.position,
                 path_dir: m.path_dir.display().to_string(),
@@ -70,10 +72,10 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
                     is_broken: s.is_broken,
                     is_circular: s.is_circular,
                 }),
-            }
-        }).collect(),
+            })
+            .collect(),
     };
-    
+
     serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string())
 }
 
@@ -82,8 +84,10 @@ pub fn format_analysis(analysis: &PathAnalysis) -> String {
     let json_analysis = JsonAnalysis {
         total_entries: analysis.total_entries,
         valid_dirs: analysis.valid_dirs,
-        issues: analysis.issues.iter().map(|i| {
-            JsonIssue {
+        issues: analysis
+            .issues
+            .iter()
+            .map(|i| JsonIssue {
                 path: i.path.display().to_string(),
                 position: i.position,
                 level: match i.level {
@@ -92,11 +96,66 @@ pub fn format_analysis(analysis: &PathAnalysis) -> String {
                 },
                 description: i.description.clone(),
                 suggestion: i.suggestion.clone(),
-            }
-        }).collect(),
+            })
+            .collect(),
     };
-    
+
     serde_json::to_string_pretty(&json_analysis).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// JSON-serializable diff comparison.
+#[derive(Debug, Serialize)]
+pub struct JsonDiff {
+    pub commands: Vec<JsonDiffEntry>,
+    pub same_source: bool,
+    pub warning: Option<String>,
+}
+
+/// JSON-serializable diff entry for a single command.
+#[derive(Debug, Serialize)]
+pub struct JsonDiffEntry {
+    pub command: String,
+    pub found: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    pub source_dir: Option<String>,
+}
+
+/// Format a diff comparison as JSON.
+pub fn format_diff(results: &[ResolutionResult]) -> String {
+    let entries: Vec<JsonDiffEntry> = results
+        .iter()
+        .map(|r| JsonDiffEntry {
+            command: r.command.clone(),
+            found: r.resolved.is_some(),
+            path: r.resolved.as_ref().map(|p| p.display().to_string()),
+            version: r.matches.first().and_then(|m| m.version.clone()),
+            source_dir: r.matches.first().map(|m| m.path_dir.display().to_string()),
+        })
+        .collect();
+
+    // Check if all commands come from the same directory
+    let source_dirs: std::collections::HashSet<_> = entries
+        .iter()
+        .filter_map(|e| e.source_dir.as_ref())
+        .collect();
+
+    let same_source = source_dirs.len() <= 1;
+    let all_found = entries.iter().all(|e| e.found);
+
+    let warning = if !same_source && all_found {
+        Some("Commands come from different directories - possible version mismatch".to_string())
+    } else {
+        None
+    };
+
+    let diff = JsonDiff {
+        commands: entries,
+        same_source,
+        warning,
+    };
+
+    serde_json::to_string_pretty(&diff).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[cfg(test)]
@@ -159,5 +218,69 @@ mod tests {
         let output = format_resolution(&result);
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert!(parsed["resolved"].is_null());
+    }
+
+    #[test]
+    fn test_format_diff_valid_json() {
+        let result1 = mock_result();
+        let mut result2 = mock_result();
+        result2.command = "test2".to_string();
+
+        let results = vec![result1, result2];
+        let output = format_diff(&results);
+
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert!(parsed["commands"].is_array());
+        assert_eq!(parsed["commands"].as_array().unwrap().len(), 2);
+        assert!(parsed["same_source"].is_boolean());
+    }
+
+    #[test]
+    fn test_format_diff_same_source() {
+        let result1 = mock_result();
+        let mut result2 = mock_result();
+        result2.command = "test2".to_string();
+
+        let results = vec![result1, result2];
+        let output = format_diff(&results);
+
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["same_source"], true);
+        assert!(parsed["warning"].is_null());
+    }
+
+    #[test]
+    fn test_format_diff_different_sources() {
+        let result1 = ResolutionResult {
+            command: "cmd1".to_string(),
+            resolved: Some(PathBuf::from("/usr/bin/cmd1")),
+            matches: vec![CommandMatch {
+                path: PathBuf::from("/usr/bin/cmd1"),
+                position: 0,
+                path_dir: PathBuf::from("/usr/bin"),
+                is_selected: true,
+                version: None,
+                symlink: None,
+            }],
+        };
+        let result2 = ResolutionResult {
+            command: "cmd2".to_string(),
+            resolved: Some(PathBuf::from("/usr/local/bin/cmd2")),
+            matches: vec![CommandMatch {
+                path: PathBuf::from("/usr/local/bin/cmd2"),
+                position: 1,
+                path_dir: PathBuf::from("/usr/local/bin"),
+                is_selected: true,
+                version: None,
+                symlink: None,
+            }],
+        };
+
+        let results = vec![result1, result2];
+        let output = format_diff(&results);
+
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["same_source"], false);
+        assert!(parsed["warning"].is_string());
     }
 }

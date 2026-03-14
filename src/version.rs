@@ -33,20 +33,20 @@ fn try_version_flag(path: &Path, flag: &str, timeout_ms: u64) -> Option<String> 
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    
+
     let child = match cmd.spawn() {
         Ok(c) => c,
         Err(_) => return None,
     };
-    
+
     // Wait with timeout
     let output = wait_with_timeout(child, timeout_ms)?;
-    
+
     // Check exit status
     if !output.status.success() {
         return None;
     }
-    
+
     // Try stdout first, then stderr
     let text = if !output.stdout.is_empty() {
         String::from_utf8_lossy(&output.stdout).to_string()
@@ -55,7 +55,7 @@ fn try_version_flag(path: &Path, flag: &str, timeout_ms: u64) -> Option<String> 
     } else {
         return None;
     };
-    
+
     // Return first non-empty line
     text.lines()
         .map(|l| l.trim())
@@ -65,16 +65,16 @@ fn try_version_flag(path: &Path, flag: &str, timeout_ms: u64) -> Option<String> 
 
 /// Wait for a process with timeout.
 fn wait_with_timeout(child: std::process::Child, timeout_ms: u64) -> Option<std::process::Output> {
-    use std::thread;
     use std::sync::mpsc;
-    
+    use std::thread;
+
     let (tx, rx) = mpsc::channel();
-    
+
     thread::spawn(move || {
         let result = child.wait_with_output();
         let _ = tx.send(result);
     });
-    
+
     let timeout = Duration::from_millis(timeout_ms);
     match rx.recv_timeout(timeout) {
         Ok(Ok(output)) => Some(output),

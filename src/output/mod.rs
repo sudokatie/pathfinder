@@ -47,6 +47,15 @@ pub fn print_explain(result: &ResolutionResult, format: OutputFormat) {
     }
 }
 
+/// Print a diff comparison of multiple commands.
+pub fn print_diff(results: &[ResolutionResult], format: OutputFormat, use_color: bool) {
+    match format {
+        OutputFormat::Human => print!("{}", human::format_diff(results, use_color)),
+        OutputFormat::Json => print!("{}", json::format_diff(results)),
+        OutputFormat::Plain => print!("{}", plain::format_diff(results)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

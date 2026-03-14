@@ -32,7 +32,7 @@ pub fn is_executable(path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
-    
+
     // Check if the file has an executable extension
     if let Some(ext) = path.extension() {
         let ext_upper = format!(".{}", ext.to_string_lossy().to_uppercase());
@@ -48,13 +48,13 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
     if !dir.is_dir() {
         return None;
     }
-    
+
     // First, try exact match (for commands with extension already)
     let exact = dir.join(command);
     if exact.is_file() && is_executable(&exact) {
         return Some(exact);
     }
-    
+
     // Try each PATHEXT extension
     for ext in get_pathext() {
         let name = format!("{}{}", command, ext.to_lowercase());
@@ -63,7 +63,7 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
             return Some(candidate);
         }
     }
-    
+
     None
 }
 

@@ -44,7 +44,7 @@ impl PathAnalysis {
     pub fn has_errors(&self) -> bool {
         self.issues.iter().any(|i| i.level == IssueLevel::Error)
     }
-    
+
     /// Check if there are any issues at all.
     #[allow(dead_code)]
     pub fn has_issues(&self) -> bool {
@@ -58,7 +58,7 @@ pub fn analyze_path() -> PathAnalysis {
     let mut issues = Vec::new();
     let mut valid_dirs = 0;
     let mut seen: HashMap<PathBuf, usize> = HashMap::new();
-    
+
     for (position, path) in entries.iter().enumerate() {
         // Check for empty path (shouldn't happen after filtering, but just in case)
         if path.as_os_str().is_empty() {
@@ -71,7 +71,7 @@ pub fn analyze_path() -> PathAnalysis {
             });
             continue;
         }
-        
+
         // Check if directory exists
         if !path.exists() {
             issues.push(PathIssue {
@@ -83,7 +83,7 @@ pub fn analyze_path() -> PathAnalysis {
             });
             continue;
         }
-        
+
         // Check if it's actually a directory
         if !path.is_dir() {
             issues.push(PathIssue {
@@ -95,7 +95,7 @@ pub fn analyze_path() -> PathAnalysis {
             });
             continue;
         }
-        
+
         // Check for read permission
         if std::fs::read_dir(path).is_err() {
             issues.push(PathIssue {
@@ -107,7 +107,7 @@ pub fn analyze_path() -> PathAnalysis {
             });
             continue;
         }
-        
+
         // Check for duplicates
         if let Some(&first_pos) = seen.get(path) {
             issues.push(PathIssue {
@@ -120,11 +120,11 @@ pub fn analyze_path() -> PathAnalysis {
             // Don't count as valid since it's a duplicate
             continue;
         }
-        
+
         seen.insert(path.clone(), position);
         valid_dirs += 1;
     }
-    
+
     PathAnalysis {
         total_entries: entries.len(),
         valid_dirs,

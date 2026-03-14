@@ -89,8 +89,32 @@ fn test_explain_mode() {
 
 #[test]
 fn test_no_version_flag() {
+    pathfinder().args(["ls", "--no-version"]).assert().success();
+}
+
+#[test]
+fn test_diff_mode() {
     pathfinder()
-        .args(["ls", "--no-version"])
+        .args(["--diff", "ls", "cat"])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("Command Comparison"));
+}
+
+#[test]
+fn test_diff_mode_json() {
+    pathfinder()
+        .args(["--diff", "ls", "cat", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"same_source\""));
+}
+
+#[test]
+fn test_diff_requires_two_commands() {
+    pathfinder()
+        .args(["--diff", "ls"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("requires at least 2 commands"));
 }

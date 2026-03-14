@@ -58,29 +58,29 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
     let path_entries = get_path_entries();
     let mut matches = Vec::new();
     let mut resolved = None;
-    
+
     for (position, dir) in path_entries.iter().enumerate() {
         if let Some(path) = find_command_in_dir(dir, command) {
             let is_selected = matches.is_empty();
-            
+
             if is_selected {
                 resolved = Some(path.clone());
             }
-            
+
             // Get version if not skipped
             let version = if config.skip_version {
                 None
             } else {
                 detect_version(&path, config.timeout_ms)
             };
-            
+
             // Get symlink info if it's a symlink
             let symlink = if is_symlink(&path) {
                 Some(resolve_symlink(&path))
             } else {
                 None
             };
-            
+
             matches.push(CommandMatch {
                 path,
                 position,
@@ -91,7 +91,7 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
             });
         }
     }
-    
+
     ResolutionResult {
         command: command.to_string(),
         resolved,

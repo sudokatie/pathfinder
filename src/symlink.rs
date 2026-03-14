@@ -40,11 +40,11 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
     let mut chain = Vec::new();
     let mut seen = HashSet::new();
     let mut current = path.to_path_buf();
-    
+
     // Add the starting path
     chain.push(current.clone());
     seen.insert(current.clone());
-    
+
     loop {
         // Check depth limit
         if chain.len() > MAX_SYMLINK_DEPTH {
@@ -56,7 +56,7 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                 is_circular: true,
             };
         }
-        
+
         // Check if current is a symlink
         if !is_symlink(&current) {
             // Reached a non-symlink - check if it exists
@@ -78,7 +78,7 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                 };
             }
         }
-        
+
         // Read the symlink target
         match fs::read_link(&current) {
             Ok(target) => {
@@ -86,11 +86,9 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                 let resolved = if target.is_absolute() {
                     target
                 } else {
-                    current.parent()
-                        .map(|p| p.join(&target))
-                        .unwrap_or(target)
+                    current.parent().map(|p| p.join(&target)).unwrap_or(target)
                 };
-                
+
                 // Check for circular reference
                 if seen.contains(&resolved) {
                     chain.push(resolved);
@@ -102,7 +100,7 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                         is_circular: true,
                     };
                 }
-                
+
                 chain.push(resolved.clone());
                 seen.insert(resolved.clone());
                 current = resolved;
@@ -132,7 +130,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let file = tmp.path().join("regular.txt");
         fs::write(&file, "test").unwrap();
-        
+
         assert!(!is_symlink(&file));
     }
 
@@ -141,10 +139,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let file = tmp.path().join("target.txt");
         let link = tmp.path().join("link.txt");
-        
+
         fs::write(&file, "test").unwrap();
         symlink(&file, &link).unwrap();
-        
+
         assert!(is_symlink(&link));
     }
 
@@ -158,7 +156,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let file = tmp.path().join("regular.txt");
         fs::write(&file, "test").unwrap();
-        
+
         let info = resolve_symlink(&file);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
@@ -170,10 +168,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let target = tmp.path().join("target.txt");
         let link = tmp.path().join("link.txt");
-        
+
         fs::write(&target, "test").unwrap();
         symlink(&target, &link).unwrap();
-        
+
         let info = resolve_symlink(&link);
         assert!(!info.is_broken);
         assert!(!info.is_circular);
@@ -186,9 +184,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let target = tmp.path().join("nonexistent.txt");
         let link = tmp.path().join("broken_link.txt");
-        
+
         symlink(&target, &link).unwrap();
-        
+
         let info = resolve_symlink(&link);
         assert!(info.is_broken);
         assert!(!info.is_circular);
@@ -200,11 +198,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let link_a = tmp.path().join("link_a");
         let link_b = tmp.path().join("link_b");
-        
+
         // Create circular: a -> b -> a
         symlink(&link_b, &link_a).unwrap();
         symlink(&link_a, &link_b).unwrap();
-        
+
         let info = resolve_symlink(&link_a);
         assert!(info.is_circular);
         assert!(!info.is_broken);
@@ -218,12 +216,12 @@ mod tests {
         let link1 = tmp.path().join("link1");
         let link2 = tmp.path().join("link2");
         let link3 = tmp.path().join("link3");
-        
+
         fs::write(&target, "test").unwrap();
         symlink(&target, &link1).unwrap();
         symlink(&link1, &link2).unwrap();
         symlink(&link2, &link3).unwrap();
-        
+
         let info = resolve_symlink(&link3);
         assert!(!info.is_broken);
         assert!(!info.is_circular);

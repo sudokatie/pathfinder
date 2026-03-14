@@ -21,7 +21,7 @@ pub fn is_executable(path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
-    
+
     match fs::metadata(path) {
         Ok(meta) => {
             let perms = meta.permissions();
@@ -38,12 +38,12 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
     if !dir.is_dir() {
         return None;
     }
-    
+
     let candidate = dir.join(command);
     if is_executable(&candidate) {
         return Some(candidate);
     }
-    
+
     None
 }
 
@@ -74,9 +74,9 @@ mod tests {
     #[test]
     fn test_find_command_in_dir_ls() {
         let dirs = ["/bin", "/usr/bin"];
-        let found = dirs.iter().any(|d| {
-            find_command_in_dir(Path::new(d), "ls").is_some()
-        });
+        let found = dirs
+            .iter()
+            .any(|d| find_command_in_dir(Path::new(d), "ls").is_some());
         assert!(found, "Should find ls in /bin or /usr/bin");
     }
 

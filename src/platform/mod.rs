@@ -83,19 +83,19 @@ mod tests {
     fn test_find_command_ls_or_cmd() {
         let entries = get_path_entries();
         let mut found = false;
-        
+
         #[cfg(unix)]
         let command = "ls";
         #[cfg(windows)]
         let command = "cmd";
-        
+
         for dir in &entries {
             if find_command_in_dir(dir, command).is_some() {
                 found = true;
                 break;
             }
         }
-        
+
         assert!(found, "Should find {} in PATH", command);
     }
 
