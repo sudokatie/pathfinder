@@ -96,16 +96,30 @@ fn has_valid_shebang(path: &Path) -> bool {
     true
 }
 
+/// Result of finding a command in a directory.
+#[derive(Debug, Clone)]
+pub struct FindResult {
+    /// Full path to the file.
+    pub path: PathBuf,
+    /// Whether the file is executable.
+    pub executable: bool,
+}
+
 /// Find a command in a directory.
-/// On Unix, we look for exact name match with execute permission.
-pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
+/// Returns the file even if it's not executable (to report permission denied).
+/// On Unix, we look for exact name match.
+pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<FindResult> {
     if !dir.is_dir() {
         return None;
     }
 
     let candidate = dir.join(command);
-    if is_executable(&candidate) {
-        return Some(candidate);
+    if candidate.is_file() {
+        let executable = is_executable(&candidate);
+        return Some(FindResult {
+            path: candidate,
+            executable,
+        });
     }
 
     None
@@ -151,6 +165,18 @@ mod tests {
             .iter()
             .any(|d| find_command_in_dir(Path::new(d), "ls").is_some());
         assert!(found, "Should find ls in /bin or /usr/bin");
+    }
+
+    #[test]
+    fn test_find_command_in_dir_ls_executable() {
+        let dirs = ["/bin", "/usr/bin"];
+        for d in &dirs {
+            if let Some(result) = find_command_in_dir(Path::new(d), "ls") {
+                assert!(result.executable, "ls should be executable");
+                return;
+            }
+        }
+        panic!("Should find ls");
     }
 
     #[test]

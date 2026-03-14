@@ -9,6 +9,15 @@ mod windows;
 
 use std::path::{Path, PathBuf};
 
+/// Result of finding a command in a directory.
+#[derive(Debug, Clone)]
+pub struct FindResult {
+    /// Full path to the file.
+    pub path: PathBuf,
+    /// Whether the file is executable.
+    pub executable: bool,
+}
+
 /// Get PATH entries as a vector of paths.
 pub fn get_path_entries() -> Vec<PathBuf> {
     #[cfg(unix)]
@@ -35,15 +44,21 @@ pub fn is_executable(path: &Path) -> bool {
 }
 
 /// Find a command in a directory.
-/// Returns the full path if found, None otherwise.
-pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
+/// Returns the full path and whether it's executable.
+pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<FindResult> {
     #[cfg(unix)]
     {
-        unix::find_command_in_dir(dir, command)
+        unix::find_command_in_dir(dir, command).map(|r| FindResult {
+            path: r.path,
+            executable: r.executable,
+        })
     }
     #[cfg(windows)]
     {
-        windows::find_command_in_dir(dir, command)
+        windows::find_command_in_dir(dir, command).map(|r| FindResult {
+            path: r.path,
+            executable: r.executable,
+        })
     }
 }
 
@@ -97,6 +112,25 @@ mod tests {
         }
 
         assert!(found, "Should find {} in PATH", command);
+    }
+
+    #[test]
+    fn test_find_command_executable() {
+        let entries = get_path_entries();
+
+        #[cfg(unix)]
+        let command = "ls";
+        #[cfg(windows)]
+        let command = "cmd";
+
+        for dir in &entries {
+            if let Some(result) = find_command_in_dir(dir, command) {
+                assert!(result.executable, "{} should be executable", command);
+                return;
+            }
+        }
+
+        panic!("Should find {}", command);
     }
 
     #[test]

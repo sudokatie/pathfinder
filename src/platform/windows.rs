@@ -81,18 +81,31 @@ fn is_windows_apps_alias(path: &Path) -> bool {
     path_str.contains("windowsapps") || path_str.contains("microsoft\\windowsapps")
 }
 
+/// Result of finding a command in a directory.
+#[derive(Debug, Clone)]
+pub struct FindResult {
+    /// Full path to the file.
+    pub path: PathBuf,
+    /// Whether the file is executable.
+    pub executable: bool,
+}
+
 /// Find a command in a directory.
 /// On Windows, we try the command with each PATHEXT extension.
 /// Also handles App Execution Aliases in WindowsApps.
-pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
+pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<FindResult> {
     if !dir.is_dir() {
         return None;
     }
 
     // First, try exact match (for commands with extension already)
     let exact = dir.join(command);
-    if exact.is_file() && is_executable(&exact) {
-        return Some(exact);
+    if exact.is_file() {
+        let executable = is_executable(&exact);
+        return Some(FindResult {
+            path: exact,
+            executable,
+        });
     }
 
     // Try each PATHEXT extension
@@ -100,7 +113,10 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
         let name = format!("{}{}", command, ext.to_lowercase());
         let candidate = dir.join(&name);
         if candidate.is_file() {
-            return Some(candidate);
+            return Some(FindResult {
+                path: candidate,
+                executable: true, // Has PATHEXT extension, so executable
+            });
         }
     }
 
@@ -113,7 +129,10 @@ pub fn find_command_in_dir(dir: &Path, command: &str) -> Option<PathBuf> {
             let candidate = dir.join(&name);
             // App aliases exist as zero-byte files
             if candidate.exists() {
-                return Some(candidate);
+                return Some(FindResult {
+                    path: candidate,
+                    executable: true,
+                });
             }
         }
     }

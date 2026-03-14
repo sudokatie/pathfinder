@@ -29,15 +29,21 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
 
         output.push_str(&format!("{}. {}{}\n", i + 1, m.path.display(), marker));
 
-        // Show version, or special messages for broken symlinks
-        if let Some(symlink) = &m.symlink {
+        // Show version, or special messages for permission denied / broken symlinks / unknown
+        if !m.executable {
+            output.push_str("   version: (permission denied)\n");
+        } else if let Some(symlink) = &m.symlink {
             if symlink.is_broken {
                 output.push_str("   version: (broken symlink)\n");
             } else if let Some(version) = &m.version {
                 output.push_str(&format!("   version: {}\n", version));
+            } else {
+                output.push_str("   version: (version unknown)\n");
             }
         } else if let Some(version) = &m.version {
             output.push_str(&format!("   version: {}\n", version));
+        } else {
+            output.push_str("   version: (version unknown)\n");
         }
 
         // Show symlink info

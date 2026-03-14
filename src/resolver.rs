@@ -16,7 +16,7 @@ pub struct CommandMatch {
     pub position: usize,
     /// The PATH directory this was found in.
     pub path_dir: PathBuf,
-    /// Whether this is the selected (first) match.
+    /// Whether this is the selected (first executable) match.
     pub is_selected: bool,
     /// Detected version (if available).
     pub version: Option<String>,
@@ -31,7 +31,7 @@ pub struct CommandMatch {
 pub struct ResolutionResult {
     /// The command that was resolved.
     pub command: String,
-    /// The resolved path (first match).
+    /// The resolved path (first executable match).
     pub resolved: Option<PathBuf>,
     /// All matches found in PATH order.
     pub matches: Vec<CommandMatch>,
@@ -65,15 +65,19 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
     let mut resolved = None;
 
     for (position, dir) in path_entries.iter().enumerate() {
-        if let Some(path) = find_command_in_dir(dir, command) {
-            let is_selected = matches.is_empty();
+        if let Some(find_result) = find_command_in_dir(dir, command) {
+            let path = find_result.path;
+            let executable = find_result.executable;
+
+            // Only the first executable match is "selected"
+            let is_selected = executable && resolved.is_none();
 
             if is_selected {
                 resolved = Some(path.clone());
             }
 
-            // Get version if not skipped
-            let version = if config.skip_version {
+            // Get version only if executable and not skipped
+            let version = if !executable || config.skip_version {
                 None
             } else {
                 detect_version(&path, config.timeout_ms)
@@ -85,9 +89,6 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
             } else {
                 None
             };
-
-            // File is executable if we found it (find_command_in_dir checks this)
-            let executable = true;
 
             matches.push(CommandMatch {
                 path,
