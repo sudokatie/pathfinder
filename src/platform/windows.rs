@@ -1,6 +1,7 @@
 //! Windows-specific platform functions.
 
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Executable extensions on Windows (in priority order).
@@ -79,6 +80,153 @@ pub fn is_executable(path: &Path) -> bool {
 fn is_windows_apps_alias(path: &Path) -> bool {
     let path_str = path.to_string_lossy().to_lowercase();
     path_str.contains("windowsapps") || path_str.contains("microsoft\\windowsapps")
+}
+
+/// Check if a path is a .lnk shortcut file.
+pub fn is_lnk_file(path: &Path) -> bool {
+    path.extension()
+        .map(|ext| ext.to_ascii_lowercase() == "lnk")
+        .unwrap_or(false)
+}
+
+/// Parse a .lnk shortcut file and return the target path.
+/// Returns None if the file cannot be parsed or is not a valid .lnk file.
+pub fn parse_lnk_target(path: &Path) -> Option<PathBuf> {
+    // .lnk file format: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/
+    // We parse the minimum needed to extract the target path.
+
+    let data = fs::read(path).ok()?;
+
+    // Check minimum size and magic bytes
+    if data.len() < 76 {
+        return None;
+    }
+
+    // Header magic: 4C 00 00 00 (LNK signature)
+    if data[0..4] != [0x4C, 0x00, 0x00, 0x00] {
+        return None;
+    }
+
+    // LinkFlags at offset 0x14 (4 bytes, little-endian)
+    let link_flags = u32::from_le_bytes([data[0x14], data[0x15], data[0x16], data[0x17]]);
+
+    // HasLinkTargetIDList flag is bit 0
+    let has_id_list = (link_flags & 0x01) != 0;
+    // HasLinkInfo flag is bit 1
+    let has_link_info = (link_flags & 0x02) != 0;
+
+    let mut offset = 76; // End of header
+
+    // Skip LinkTargetIDList if present
+    if has_id_list {
+        if offset + 2 > data.len() {
+            return None;
+        }
+        let id_list_size = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+        offset += 2 + id_list_size;
+    }
+
+    // Parse LinkInfo if present (contains local path)
+    if has_link_info {
+        if offset + 4 > data.len() {
+            return None;
+        }
+        let link_info_size = u32::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
+
+        if offset + link_info_size > data.len() || link_info_size < 28 {
+            return None;
+        }
+
+        // LinkInfoFlags at offset+8
+        let link_info_flags = u32::from_le_bytes([
+            data[offset + 8],
+            data[offset + 9],
+            data[offset + 10],
+            data[offset + 11],
+        ]);
+
+        // VolumeIDAndLocalBasePath flag is bit 0
+        if (link_info_flags & 0x01) != 0 {
+            // LocalBasePathOffset at offset+16
+            let local_path_offset = u32::from_le_bytes([
+                data[offset + 16],
+                data[offset + 17],
+                data[offset + 18],
+                data[offset + 19],
+            ]) as usize;
+
+            if local_path_offset > 0 && offset + local_path_offset < data.len() {
+                // Read null-terminated string
+                let path_start = offset + local_path_offset;
+                let path_end = data[path_start..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .map(|p| path_start + p)
+                    .unwrap_or(data.len());
+
+                if path_end > path_start {
+                    let path_bytes = &data[path_start..path_end];
+                    if let Ok(path_str) = String::from_utf8(path_bytes.to_vec()) {
+                        return Some(PathBuf::from(path_str));
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Information about a junction point or reparse point.
+#[derive(Debug, Clone)]
+pub struct ReparseInfo {
+    /// Whether this is a junction point.
+    pub is_junction: bool,
+    /// Whether this is a symlink.
+    pub is_symlink: bool,
+    /// The target path (if available).
+    pub target: Option<PathBuf>,
+}
+
+/// Check if a path is a junction point (Windows NTFS).
+/// Junction points are directory symlinks created with `mklink /J`.
+#[cfg(windows)]
+pub fn get_reparse_info(path: &Path) -> Option<ReparseInfo> {
+    use std::os::windows::fs::MetadataExt;
+
+    let metadata = fs::symlink_metadata(path).ok()?;
+    let attrs = metadata.file_attributes();
+
+    // FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+    if (attrs & 0x400) == 0 {
+        return None;
+    }
+
+    // It's a reparse point - try to determine the type
+    // We can use fs::read_link to get the target for symlinks
+    let target = fs::read_link(path).ok();
+
+    // Heuristic: junctions are typically directories, symlinks can be either
+    let is_dir = metadata.is_dir();
+
+    // For now, we detect based on whether read_link succeeds and it's a directory
+    // True junction detection would require DeviceIoControl with FSCTL_GET_REPARSE_POINT
+    Some(ReparseInfo {
+        is_junction: is_dir && target.is_some(),
+        is_symlink: target.is_some() && !is_dir,
+        target,
+    })
+}
+
+/// Stub for non-Windows platforms.
+#[cfg(not(windows))]
+pub fn get_reparse_info(_path: &Path) -> Option<ReparseInfo> {
+    None
 }
 
 /// Result of finding a command in a directory.
@@ -219,5 +367,31 @@ mod tests {
             "C:\\Users\\Test\\AppData\\Local\\Microsoft\\WindowsApps"
         )));
         assert!(!is_windows_apps_alias(Path::new("C:\\Windows\\System32")));
+    }
+
+    #[test]
+    fn test_is_lnk_file() {
+        assert!(is_lnk_file(Path::new(
+            "C:\\Users\\Test\\Desktop\\shortcut.lnk"
+        )));
+        assert!(is_lnk_file(Path::new("shortcut.LNK")));
+        assert!(!is_lnk_file(Path::new("program.exe")));
+        assert!(!is_lnk_file(Path::new("document.txt")));
+    }
+
+    #[test]
+    fn test_parse_lnk_target_invalid() {
+        // Non-existent file
+        let result = parse_lnk_target(Path::new("C:\\nonexistent.lnk"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_lnk_target_not_lnk() {
+        // Test with empty/invalid data - should return None
+        // We can't easily create a temp file in cross-platform tests,
+        // but the function should handle invalid data gracefully
+        let result = parse_lnk_target(Path::new("/dev/null"));
+        assert!(result.is_none());
     }
 }

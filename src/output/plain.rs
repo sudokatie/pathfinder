@@ -11,13 +11,28 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
 
     match &result.resolved {
         Some(path) => {
-            output.push_str(&format!("RESOLVED: {}\n\n", path.display()));
+            output.push_str(&format!("RESOLVED: {}\n", path.display()));
+            // Warn if this is also a shell builtin
+            if result.is_builtin {
+                output.push_str(&format!(
+                    "NOTE: '{}' is also a shell builtin - the builtin may take precedence\n",
+                    result.command
+                ));
+            }
+            output.push('\n');
         }
         None => {
             output.push_str(&format!(
                 "NOT FOUND: Command '{}' not found in PATH\n",
                 result.command
             ));
+            // Mention if it might be a builtin
+            if result.is_builtin {
+                output.push_str(&format!(
+                    "NOTE: '{}' is a shell builtin - it works in your shell but has no PATH executable\n",
+                    result.command
+                ));
+            }
             return output;
         }
     }
@@ -46,22 +61,35 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
             output.push_str("   version: (version unknown)\n");
         }
 
-        // Show symlink info
+        // Show symlink info (including Windows .lnk and junction points)
         if let Some(symlink) = &m.symlink {
+            // Determine the type label
+            let type_label = if symlink.is_lnk {
+                "shortcut"
+            } else if symlink.is_junction {
+                "junction"
+            } else {
+                "symlink"
+            };
+
             if symlink.is_broken {
                 if let Some(raw) = &symlink.raw_target {
-                    output.push_str(&format!("   symlink: -> {} (DEAD)\n", raw.display()));
+                    output.push_str(&format!("   {}: -> {} (DEAD)\n", type_label, raw.display()));
                 } else {
-                    output.push_str("   symlink: yes (broken)\n");
+                    output.push_str(&format!("   {}: yes (broken)\n", type_label));
                 }
             } else if symlink.is_circular {
                 if let Some(raw) = &symlink.raw_target {
-                    output.push_str(&format!("   symlink: -> {} (CIRCULAR)\n", raw.display()));
+                    output.push_str(&format!(
+                        "   {}: -> {} (CIRCULAR)\n",
+                        type_label,
+                        raw.display()
+                    ));
                 } else {
-                    output.push_str("   symlink: yes (circular)\n");
+                    output.push_str(&format!("   {}: yes (circular)\n", type_label));
                 }
             } else if let Some(raw) = &symlink.raw_target {
-                output.push_str(&format!("   symlink: -> {}\n", raw.display()));
+                output.push_str(&format!("   {}: -> {}\n", type_label, raw.display()));
             }
         } else {
             output.push_str("   symlink: no\n");
@@ -246,6 +274,7 @@ mod tests {
                 executable: true,
             }],
             path_searched: vec![PathBuf::from("/usr/bin")],
+            is_builtin: false,
         }
     }
 
@@ -264,6 +293,7 @@ mod tests {
             resolved: None,
             matches: vec![],
             path_searched: vec![PathBuf::from("/usr/bin")],
+            is_builtin: false,
         };
         let output = format_resolution(&result);
         assert!(output.contains("NOT FOUND"));

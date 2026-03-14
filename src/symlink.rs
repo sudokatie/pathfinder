@@ -1,6 +1,7 @@
 //! Symlink resolution.
 //!
 //! Follows symlink chains and detects issues (broken, circular).
+//! On Windows, also handles .lnk shortcut files and junction points.
 
 use std::collections::HashSet;
 use std::fs;
@@ -9,7 +10,7 @@ use std::path::{Path, PathBuf};
 /// Maximum depth for symlink resolution to prevent infinite loops.
 const MAX_SYMLINK_DEPTH: usize = 40;
 
-/// Information about a symlink.
+/// Information about a symlink (or Windows .lnk / junction point).
 #[derive(Debug, Clone)]
 pub struct SymlinkInfo {
     /// The original symlink path.
@@ -26,20 +27,58 @@ pub struct SymlinkInfo {
     pub is_broken: bool,
     /// Whether there's a circular reference.
     pub is_circular: bool,
+    /// Whether this is a Windows .lnk shortcut file.
+    pub is_lnk: bool,
+    /// Whether this is a Windows junction point.
+    pub is_junction: bool,
 }
 
-/// Check if a path is a symlink.
+/// Check if a path is a symlink (or Windows .lnk file).
 pub fn is_symlink(path: &Path) -> bool {
-    path.symlink_metadata()
+    // Check for regular symlink
+    if path
+        .symlink_metadata()
         .map(|m| m.file_type().is_symlink())
         .unwrap_or(false)
+    {
+        return true;
+    }
+
+    // On Windows, also check for .lnk files
+    #[cfg(windows)]
+    {
+        if crate::platform::is_lnk_file(path) && path.is_file() {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Resolve a symlink chain.
 ///
 /// Returns information about the symlink, including the full chain
 /// and any issues found (broken link, circular reference).
+/// On Windows, also handles .lnk shortcut files and junction points.
 pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
+    // Check for Windows .lnk file first
+    #[cfg(windows)]
+    {
+        if crate::platform::is_lnk_file(path) {
+            return resolve_lnk_file(path);
+        }
+    }
+
+    // Check for Windows junction point
+    #[cfg(windows)]
+    let is_junction = {
+        crate::platform::get_reparse_info(path)
+            .map(|r| r.is_junction)
+            .unwrap_or(false)
+    };
+    #[cfg(not(windows))]
+    let is_junction = false;
+
     let mut chain = Vec::new();
     let mut seen = HashSet::new();
     let mut current = path.to_path_buf();
@@ -61,6 +100,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                 chain,
                 is_broken: false,
                 is_circular: true,
+                is_lnk: false,
+                is_junction,
             };
         }
 
@@ -75,6 +116,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                     chain,
                     is_broken: false,
                     is_circular: false,
+                    is_lnk: false,
+                    is_junction,
                 };
             } else {
                 return SymlinkInfo {
@@ -84,6 +127,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                     chain,
                     is_broken: true,
                     is_circular: false,
+                    is_lnk: false,
+                    is_junction,
                 };
             }
         }
@@ -108,6 +153,8 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                         chain,
                         is_broken: false,
                         is_circular: true,
+                        is_lnk: false,
+                        is_junction,
                     };
                 }
 
@@ -124,7 +171,50 @@ pub fn resolve_symlink(path: &Path) -> SymlinkInfo {
                     chain,
                     is_broken: true,
                     is_circular: false,
+                    is_lnk: false,
+                    is_junction,
                 };
+            }
+        }
+    }
+}
+
+/// Resolve a Windows .lnk shortcut file.
+#[cfg(windows)]
+fn resolve_lnk_file(path: &Path) -> SymlinkInfo {
+    let raw_target = crate::platform::parse_lnk_target(path);
+
+    match &raw_target {
+        Some(target) => {
+            let resolved = if target.exists() {
+                Some(target.clone())
+            } else {
+                None
+            };
+            let is_broken = resolved.is_none();
+
+            SymlinkInfo {
+                original: path.to_path_buf(),
+                raw_target: raw_target.clone(),
+                resolved,
+                chain: vec![path.to_path_buf()],
+                is_broken,
+                is_circular: false,
+                is_lnk: true,
+                is_junction: false,
+            }
+        }
+        None => {
+            // Couldn't parse .lnk file
+            SymlinkInfo {
+                original: path.to_path_buf(),
+                raw_target: None,
+                resolved: None,
+                chain: vec![path.to_path_buf()],
+                is_broken: true,
+                is_circular: false,
+                is_lnk: true,
+                is_junction: false,
             }
         }
     }

@@ -13,6 +13,9 @@ pub struct JsonOutput {
     pub resolved: Option<String>,
     pub matches: Vec<JsonMatch>,
     pub path_searched: Vec<String>,
+    /// Whether the command name matches a shell builtin.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_builtin: bool,
 }
 
 /// JSON-serializable command match.
@@ -34,6 +37,12 @@ pub struct JsonSymlink {
     pub resolved: Option<String>,
     /// Whether the symlink is broken.
     pub broken: bool,
+    /// Whether this is a Windows .lnk shortcut file.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_lnk: bool,
+    /// Whether this is a Windows junction point.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_junction: bool,
 }
 
 /// JSON-serializable PATH analysis.
@@ -70,6 +79,8 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
                     target: s.raw_target.as_ref().map(|p| p.display().to_string()),
                     resolved: s.resolved.as_ref().map(|p| p.display().to_string()),
                     broken: s.is_broken,
+                    is_lnk: s.is_lnk,
+                    is_junction: s.is_junction,
                 }),
                 executable: m.executable,
             })
@@ -79,6 +90,7 @@ pub fn format_resolution(result: &ResolutionResult) -> String {
             .iter()
             .map(|p| p.display().to_string())
             .collect(),
+        is_builtin: result.is_builtin,
     };
 
     serde_json::to_string_pretty(&json_output).unwrap_or_else(|_| "{}".to_string())
@@ -183,6 +195,7 @@ mod tests {
                 executable: true,
             }],
             path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
+            is_builtin: false,
         }
     }
 
@@ -247,6 +260,7 @@ mod tests {
             resolved: None,
             matches: vec![],
             path_searched: vec![PathBuf::from("/usr/bin")],
+            is_builtin: false,
         };
         let output = format_resolution(&result);
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
@@ -297,6 +311,7 @@ mod tests {
                 executable: true,
             }],
             path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
+            is_builtin: false,
         };
         let result2 = ResolutionResult {
             command: "cmd2".to_string(),
@@ -311,6 +326,7 @@ mod tests {
                 executable: true,
             }],
             path_searched: vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")],
+            is_builtin: false,
         };
 
         let results = vec![result1, result2];

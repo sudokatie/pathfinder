@@ -7,6 +7,94 @@ use crate::symlink::{is_symlink, resolve_symlink, SymlinkInfo};
 use crate::version::detect_version;
 use std::path::PathBuf;
 
+/// Common shell builtins across bash, zsh, and other shells.
+/// When a command matches one of these, we warn that the shell builtin
+/// may take precedence over the PATH executable.
+const SHELL_BUILTINS: &[&str] = &[
+    // POSIX builtins
+    ".",
+    ":",
+    "alias",
+    "bg",
+    "break",
+    "cd",
+    "command",
+    "continue",
+    "eval",
+    "exec",
+    "exit",
+    "export",
+    "false",
+    "fg",
+    "getopts",
+    "hash",
+    "jobs",
+    "kill",
+    "pwd",
+    "read",
+    "readonly",
+    "return",
+    "set",
+    "shift",
+    "test",
+    "times",
+    "trap",
+    "true",
+    "type",
+    "ulimit",
+    "umask",
+    "unalias",
+    "unset",
+    "wait",
+    // Bash-specific
+    "builtin",
+    "caller",
+    "compgen",
+    "complete",
+    "compopt",
+    "declare",
+    "dirs",
+    "disown",
+    "echo",
+    "enable",
+    "help",
+    "history",
+    "let",
+    "local",
+    "logout",
+    "mapfile",
+    "popd",
+    "printf",
+    "pushd",
+    "readarray",
+    "shopt",
+    "source",
+    "suspend",
+    "typeset",
+    // Zsh-specific
+    "autoload",
+    "bindkey",
+    "chdir",
+    "emulate",
+    "functions",
+    "rehash",
+    "setopt",
+    "unfunction",
+    "whence",
+    "where",
+    "which",
+    "zcompile",
+    "zle",
+    "zmodload",
+    "zparseopts",
+    "zstyle",
+];
+
+/// Check if a command name matches a known shell builtin.
+pub fn is_shell_builtin(command: &str) -> bool {
+    SHELL_BUILTINS.contains(&command)
+}
+
 /// A single match found in PATH.
 #[derive(Debug, Clone)]
 pub struct CommandMatch {
@@ -37,6 +125,9 @@ pub struct ResolutionResult {
     pub matches: Vec<CommandMatch>,
     /// All PATH directories that were searched.
     pub path_searched: Vec<PathBuf>,
+    /// Whether the command name matches a shell builtin.
+    /// If true, the shell builtin may take precedence over PATH.
+    pub is_builtin: bool,
 }
 
 /// Configuration for resolution.
@@ -107,6 +198,7 @@ pub fn resolve_command(command: &str, config: &ResolveConfig) -> ResolutionResul
         resolved,
         matches,
         path_searched,
+        is_builtin: is_shell_builtin(command),
     }
 }
 
@@ -203,5 +295,34 @@ mod tests {
         if !result.matches.is_empty() {
             assert!(result.matches[0].executable);
         }
+    }
+
+    #[test]
+    fn test_is_shell_builtin_true() {
+        assert!(is_shell_builtin("cd"));
+        assert!(is_shell_builtin("echo"));
+        assert!(is_shell_builtin("export"));
+        assert!(is_shell_builtin("type"));
+        assert!(is_shell_builtin("alias"));
+    }
+
+    #[test]
+    fn test_is_shell_builtin_false() {
+        assert!(!is_shell_builtin("ls"));
+        assert!(!is_shell_builtin("grep"));
+        assert!(!is_shell_builtin("node"));
+        assert!(!is_shell_builtin("python"));
+    }
+
+    #[test]
+    fn test_resolve_builtin_sets_flag() {
+        let result = resolve_command("cd", &config_no_version());
+        assert!(result.is_builtin);
+    }
+
+    #[test]
+    fn test_resolve_nonbuiltin_clears_flag() {
+        let result = resolve_command("ls", &config_no_version());
+        assert!(!result.is_builtin);
     }
 }

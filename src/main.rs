@@ -1,7 +1,9 @@
 use pathfinder::analyzer::analyze_path;
 use pathfinder::cli::parse_args;
-use pathfinder::output::{print_analysis, print_diff, print_explain, print_resolution, OutputFormat};
-use pathfinder::platform::get_path_entries;
+use pathfinder::output::{
+    print_analysis, print_diff, print_explain, print_resolution, OutputFormat,
+};
+use pathfinder::platform::{get_path_entries, is_path_empty};
 use pathfinder::resolver::{resolve_command, ResolveConfig};
 
 fn main() {
@@ -19,12 +21,13 @@ fn main() {
     // Determine color usage
     let use_color = !args.no_color && !args.plain && atty::is(atty::Stream::Stdout);
 
-    // Check for empty PATH
-    let path_entries = get_path_entries();
-    if path_entries.is_empty() {
+    // Check for empty PATH (before parsing, since empty string becomes ["."])
+    if is_path_empty() {
         eprintln!("Error: PATH environment variable is empty");
         std::process::exit(2);
     }
+
+    let _path_entries = get_path_entries();
 
     // Handle analyze mode
     if args.analyze {

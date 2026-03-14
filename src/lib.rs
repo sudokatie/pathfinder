@@ -27,6 +27,9 @@ pub mod version;
 pub use analyzer::{analyze_path, IssueLevel, PathAnalysis, PathIssue};
 pub use cli::{parse_args, Args};
 pub use output::OutputFormat;
-pub use resolver::{resolve_command, CommandMatch, ResolveConfig, ResolutionResult};
+pub use platform::is_path_empty;
+pub use resolver::{
+    is_shell_builtin, resolve_command, CommandMatch, ResolutionResult, ResolveConfig,
+};
 pub use symlink::{is_symlink, resolve_symlink, SymlinkInfo};
 pub use version::detect_version;

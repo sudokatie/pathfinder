@@ -75,6 +75,73 @@ pub fn path_separator() -> char {
     }
 }
 
+/// Check if the PATH environment variable is empty or unset.
+/// This checks the raw env var before parsing (since empty string becomes ["."]).
+pub fn is_path_empty() -> bool {
+    match std::env::var("PATH") {
+        Ok(path) => path.is_empty(),
+        Err(_) => true, // Unset counts as empty
+    }
+}
+
+/// Check if a path is a Windows .lnk shortcut file.
+#[allow(dead_code)]
+pub fn is_lnk_file(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        windows::is_lnk_file(path)
+    }
+    #[cfg(not(windows))]
+    {
+        // .lnk files are Windows-specific
+        let _ = path;
+        false
+    }
+}
+
+/// Parse a Windows .lnk shortcut file and return the target path.
+#[allow(dead_code)]
+pub fn parse_lnk_target(path: &Path) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        windows::parse_lnk_target(path)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// Information about a Windows reparse point (junction or symlink).
+#[derive(Debug, Clone)]
+pub struct ReparseInfo {
+    /// Whether this is a junction point.
+    pub is_junction: bool,
+    /// Whether this is a symlink.
+    pub is_symlink: bool,
+    /// The target path (if available).
+    pub target: Option<PathBuf>,
+}
+
+/// Get reparse point info for a path (Windows only).
+#[allow(dead_code)]
+pub fn get_reparse_info(path: &Path) -> Option<ReparseInfo> {
+    #[cfg(windows)]
+    {
+        windows::get_reparse_info(path).map(|r| ReparseInfo {
+            is_junction: r.is_junction,
+            is_symlink: r.is_symlink,
+            target: r.target,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,10 +2,20 @@
 
 use clap::Parser;
 
+/// Parse timeout value with custom error message per spec.
+fn parse_timeout(s: &str) -> Result<u64, String> {
+    s.parse::<u64>()
+        .map_err(|_| "Invalid timeout value: must be positive integer".to_string())
+}
+
 /// Debug command resolution and PATH issues.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "pathfinder")]
 #[command(version, about, long_about = None)]
+#[command(after_help = "LIMITATIONS:\n  \
+    Cannot detect shell aliases (these are shell-specific)\n  \
+    Cannot detect shell functions (these are shell-specific)\n  \
+    Cannot detect shell builtins (e.g., cd, echo, type)")]
 pub struct Args {
     /// Command to resolve
     #[arg(value_name = "COMMAND")]
@@ -36,7 +46,7 @@ pub struct Args {
     pub diff: bool,
 
     /// Version detection timeout in milliseconds
-    #[arg(short = 't', long, default_value = "2000")]
+    #[arg(short = 't', long, default_value = "2000", value_parser = parse_timeout)]
     pub timeout: u64,
 
     /// Skip version detection
