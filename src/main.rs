@@ -82,16 +82,34 @@ fn main() {
     // Standard resolution
     let result = resolve_command(command, &config);
 
-    // Handle explain mode
+    // Check if command was found
+    if result.resolved.is_none() {
+        // Per spec 7.2: error messages go to stderr (except JSON which goes to stdout)
+        match format {
+            OutputFormat::Json => {
+                // JSON output goes to stdout even for not-found
+                print!("{}", pathfinder::output::json::format_resolution(&result));
+            }
+            OutputFormat::Human | OutputFormat::Plain => {
+                // Per spec 7.2: exact message format
+                eprintln!("Command '{}' not found in PATH", command);
+                // Add shell builtin note if applicable
+                if result.is_builtin {
+                    eprintln!(
+                        "Note: '{}' is a shell builtin - it works in your shell but has no PATH executable",
+                        command
+                    );
+                }
+            }
+        }
+        std::process::exit(1);
+    }
+
+    // Handle explain mode (only for found commands)
     if args.explain {
         print_explain(&result, format);
     } else {
         print_resolution(&result, format, use_color);
-    }
-
-    // Exit code based on whether command was found
-    if result.resolved.is_none() {
-        std::process::exit(1);
     }
 }
 

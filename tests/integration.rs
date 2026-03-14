@@ -36,11 +36,12 @@ fn test_resolve_existing_command() {
 
 #[test]
 fn test_resolve_nonexistent_command() {
+    // Per SPECS 7.2: error goes to stderr with exact format
     pathfinder()
         .arg("this_command_does_not_exist_xyz123")
         .assert()
         .code(1)
-        .stdout(predicate::str::contains("NOT FOUND"));
+        .stderr(predicate::str::contains("Command 'this_command_does_not_exist_xyz123' not found in PATH"));
 }
 
 #[test]
@@ -158,4 +159,24 @@ fn test_timeout_flag() {
 #[test]
 fn test_no_color_flag() {
     pathfinder().args(["ls", "--no-color"]).assert().success();
+}
+
+#[test]
+fn test_json_not_found_to_stdout() {
+    // JSON output goes to stdout even for not-found commands
+    pathfinder()
+        .args(["this_command_does_not_exist_xyz123", "--json"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("\"resolved\": null"));
+}
+
+#[test]
+fn test_timeout_zero_rejected() {
+    // Per SPECS 7.2: timeout must be positive integer (0 is not positive)
+    pathfinder()
+        .args(["ls", "--timeout", "0"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("must be positive integer"));
 }

@@ -3,9 +3,15 @@
 use clap::Parser;
 
 /// Parse timeout value with custom error message per spec.
+/// Rejects 0 since "positive integer" means > 0.
 fn parse_timeout(s: &str) -> Result<u64, String> {
-    s.parse::<u64>()
-        .map_err(|_| "Invalid timeout value: must be positive integer".to_string())
+    let value = s
+        .parse::<u64>()
+        .map_err(|_| "Invalid timeout value: must be positive integer".to_string())?;
+    if value == 0 {
+        return Err("Invalid timeout value: must be positive integer".to_string());
+    }
+    Ok(value)
 }
 
 /// Debug command resolution and PATH issues.
@@ -115,6 +121,13 @@ mod tests {
     fn test_timeout_flag() {
         let args = parse(&["pathfinder", "node", "--timeout", "5000"]);
         assert_eq!(args.timeout, 5000);
+    }
+
+    #[test]
+    fn test_timeout_zero_rejected() {
+        // 0 is not a positive integer
+        let result = Args::try_parse_from(&["pathfinder", "node", "--timeout", "0"]);
+        assert!(result.is_err());
     }
 
     #[test]
